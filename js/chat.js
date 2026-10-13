@@ -122,6 +122,13 @@ const DEFAULT_SETTINGS = {
 
 const SUGGESTIONS = ['家を描いて', '花を描いて', '雪だるまを描いて', '六角形を色を変えながら回転させて描いて'];
 
+// Every model in MODELS is configured with a 4096-token context in WebLLM 0.2.85.
+const CONTEXT_WINDOW = 4096;
+// Kept free beyond the output limit so a retry (the failed program plus the error message) still fits.
+const RETRY_MARGIN = 350;
+// Chat-template tokens added around each message.
+const MESSAGE_OVERHEAD = 8;
+
 const $ = id => document.getElementById(id);
 const editor = $('logo-editor');
 const log = $('chat-log');
@@ -140,6 +147,11 @@ let loadedModel = null;
 let loading = false;
 let generating = false;
 let interrupted = false;
+// Successful exchanges only ({ request, code, applied }); failed attempts are left out so the model does not copy them.
+let history = [];
+// Scales the character-based estimate to the loaded model's tokenizer, learned from the real prompt token counts.
+let tokenScale = 1;
+let lastUsage = null;
 
 // ---------- Settings ----------
 
@@ -236,6 +248,92 @@ function updateUi() {
   sendButton.disabled = !ready || loading || (!generating && !input.value.trim());
   sendButton.textContent = generating ? '中止' : '送信';
   sendButton.classList.toggle('is-stop', generating);
+  $('chat-new').disabled = generating;
+  updateGauge();
+}
+
+// ---------- Context gauge ----------
+
+function rawTokenEstimate(text) {
+  let ascii = 0;
+  let other = 0;
+  for (const char of text) {
+    if (char.charCodeAt(0) < 128) ascii++;
+    else other++;
+  }
+  return ascii / 3.5 + other;
+}
+
+function estimateMessages(messages) {
+  return messages.reduce((total, message) => total + rawTokenEstimate(message.content) + MESSAGE_OVERHEAD, 0);
+}
+
+function estimate(messages) {
+  return Math.ceil(estimateMessages(messages) * tokenScale);
+}
+
+function formatNumber(value) {
+  return value.toLocaleString('ja-JP');
+}
+
+function updateGauge() {
+  const pending = input.value.trim() || '　';
+  const system = estimate([{ role: 'system', content: settings.systemPrompt }]);
+  const past = estimate(historyMessages(history));
+  const user = estimate([{ role: 'user', content: buildUserMessage(pending) }]);
+  const output = settings.maxTokens;
+  const total = system + past + user + output;
+  const scale = 100 / Math.max(CONTEXT_WINDOW, total);
+  const bar = $('chat-gauge-bar');
+  [['system', system], ['history', past], ['program', user], ['output', output]].forEach(([name, value]) => {
+    bar.querySelector(`.seg-${name}`).style.width = `${value * scale}%`;
+  });
+  bar.setAttribute('aria-valuenow', String(Math.min(total, CONTEXT_WINDOW)));
+  const over = total + RETRY_MARGIN > CONTEXT_WINDOW;
+  $('chat-gauge').classList.toggle('is-over', over);
+  $('chat-gauge-text').textContent =
+    `文脈 約${formatNumber(total)} / ${formatNumber(CONTEXT_WINDOW)}（履歴 ${history.length}件）${over ? '・次の送信で古い履歴を外します' : ''}`;
+  const actual = lastUsage
+    ? `\n前回の実測：入力 ${formatNumber(lastUsage.prompt_tokens)} ＋ 出力 ${formatNumber(lastUsage.completion_tokens)} トークン`
+    : '';
+  $('chat-gauge').title =
+    `指示文 約${formatNumber(system)}・履歴 約${formatNumber(past)}・依頼と今のプログラム 約${formatNumber(user)}・出力用の枠 ${formatNumber(output)}${actual}`;
+}
+
+// ---------- Session ----------
+
+function historyMessages(items) {
+  return items.flatMap(item => [
+    { role: 'user', content: item.request },
+    { role: 'assistant', content: `\`\`\`logo\n${item.code}\n\`\`\`` }
+  ]);
+}
+
+function buildMessages(request, items = history) {
+  return [
+    { role: 'system', content: settings.systemPrompt },
+    ...historyMessages(items),
+    { role: 'user', content: buildUserMessage(request) }
+  ];
+}
+
+/** Drops the oldest exchanges until the request, the output limit and a retry fit in the context window. */
+function fitHistory(request) {
+  let dropped = 0;
+  while (history.length && estimate(buildMessages(request)) + settings.maxTokens + RETRY_MARGIN > CONTEXT_WINDOW) {
+    history.shift();
+    dropped++;
+  }
+  if (dropped) addNote(`文脈が長くなったため、古いやり取りを${dropped}件外しました。`);
+}
+
+function startNewSession() {
+  history = [];
+  lastUsage = null;
+  log.replaceChildren();
+  addNote('新しい会話を始めました。エディタのプログラムはそのまま残っています。');
+  showSuggestions();
+  updateUi();
 }
 
 function scrollLog() {
@@ -318,6 +416,8 @@ async function loadModel() {
       await engine.reload(settings.model);
     }
     loadedModel = settings.model;
+    tokenScale = 1;
+    lastUsage = null;
     addNote(`${modelInfo(loadedModel).label} の準備ができました。`);
     progress.hidden = true;
   } catch (error) {
@@ -349,6 +449,7 @@ async function generate(messages, bubble, attempt) {
     // At a low temperature a retry tends to reproduce the same broken program, so loosen it a little each time.
     temperature: Math.min(1, settings.temperature + attempt * 0.3),
     max_tokens: settings.maxTokens,
+    stream_options: { include_usage: true },
     ...(isQwen ? { extra_body: { enable_thinking: false } } : {}),
     ...(settings.grammar ? { response_format: { type: 'grammar', grammar: LOGO_GRAMMAR } } : {})
   };
@@ -358,6 +459,10 @@ async function generate(messages, bubble, attempt) {
     text += chunk.choices[0]?.delta?.content ?? '';
     bubble.textContent = visibleText(text) || '…';
     scrollLog();
+    if (chunk.usage) {
+      lastUsage = chunk.usage;
+      tokenScale = chunk.usage.prompt_tokens / estimateMessages(messages);
+    }
   }
   return visibleText(text);
 }
@@ -378,7 +483,10 @@ function extractCode(reply) {
 function currentProgram() {
   // Only an English program can be shown to the model, since the prompt teaches English commands.
   if (!settings.includeCode || interpreter.locale !== i18n.English) return '';
-  return editor.value.trim();
+  const program = editor.value.trim();
+  // The model's last program is already in the history; send the editor only after someone changed it.
+  if (history.length && program === history.at(-1).applied.trim()) return '';
+  return program;
 }
 
 function buildUserMessage(request) {
@@ -387,8 +495,9 @@ function buildUserMessage(request) {
   return `現在のプログラム:\n\`\`\`logo\n${program}\n\`\`\`\n\n依頼: ${request}\n（今の絵を変える依頼なら現在のプログラムを直し、新しい絵の依頼なら新しく書いてください。）`;
 }
 
-function onSuccess(code) {
+function onSuccess(request, code) {
   const applied = applyProgram(code);
+  history.push({ request, code, applied });
   const actions = [
     { label: 'ブロックで見る', onClick: () => selectView('blocks') },
     { label: 'コードで見る', onClick: () => selectView('text') }
@@ -417,7 +526,8 @@ async function handleRequest(request) {
   interrupted = false;
   updateUi();
   addMessage('user', request);
-  const base = [{ role: 'system', content: settings.systemPrompt }, { role: 'user', content: buildUserMessage(request) }];
+  fitHistory(request);
+  const base = buildMessages(request);
   let messages = base;
   try {
     for (let attempt = 0; attempt <= settings.maxRetries; attempt++) {
@@ -427,7 +537,7 @@ async function handleRequest(request) {
       const code = extractCode(reply);
       const error = checkProgram(code);
       if (!error) {
-        onSuccess(code);
+        onSuccess(request, code);
         return;
       }
       if (attempt === settings.maxRetries) {
@@ -473,6 +583,10 @@ function init() {
     submit();
   });
   input.addEventListener('input', updateUi);
+  $('chat-new').addEventListener('click', startNewSession);
+  // The program can change in the other tabs, so refresh the estimate whenever the chat comes back into view.
+  editor.addEventListener('input', updateGauge);
+  $('tab-chat').addEventListener('click', updateGauge);
   input.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();

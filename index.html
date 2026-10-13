@@ -63,6 +63,15 @@
             <progress id="chat-progress-bar" max="1" value="0"></progress>
             <span id="chat-progress-text"></span>
           </div>
+          <div class="chat-session">
+            <div id="chat-gauge" class="chat-gauge">
+              <span id="chat-gauge-text" class="chat-gauge-text">文脈 –</span>
+              <div id="chat-gauge-bar" class="chat-gauge-bar" role="meter" aria-label="AIに送る文脈の量（推定）" aria-valuemin="0" aria-valuemax="4096" aria-valuenow="0">
+                <span class="seg-system"></span><span class="seg-history"></span><span class="seg-program"></span><span class="seg-output"></span>
+              </div>
+            </div>
+            <button type="button" id="chat-new" class="chat-button">新しい会話</button>
+          </div>
           <div id="chat-log" class="chat-log" aria-live="polite"></div>
           <form id="chat-form" class="chat-form">
             <label class="sr-only" for="chat-input">AIへの依頼</label>
