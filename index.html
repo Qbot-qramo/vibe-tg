@@ -43,10 +43,18 @@
             <p class="panel-kicker">01 / WRITE</p>
             <h2 id="editor-title">プログラム</h2>
           </div>
-          <span class="key-hint"><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> で実行</span>
+          <div class="view-tabs" role="tablist" aria-label="編集方法">
+            <button type="button" role="tab" id="tab-blocks" aria-selected="false" aria-controls="blocks-view" tabindex="-1">ブロック</button>
+            <button type="button" role="tab" id="tab-text" aria-selected="true" aria-controls="text-view">テキスト</button>
+          </div>
         </div>
-        <textarea id="logo-editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="LOGOプログラム" aria-describedby="editor-help"></textarea>
-        <p class="panel-help" id="editor-help">コマンドは英語またはスペイン語です。例を選ぶとコードを読み込めます。</p>
+        <div id="blocks-view" class="editor-view" role="tabpanel" aria-labelledby="tab-blocks" hidden>
+          <div id="blocks-workspace" class="blocks-workspace"></div>
+        </div>
+        <div id="text-view" class="editor-view" role="tabpanel" aria-labelledby="tab-text">
+          <textarea id="logo-editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="LOGOプログラム" aria-describedby="editor-help"></textarea>
+        </div>
+        <p class="panel-help"><span id="editor-help">コマンドは英語またはスペイン語です。例を選ぶとコードを読み込めます。</span> <span class="key-hint"><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd> で実行</span></p>
       </section>
 
       <section class="panel graphics-panel" aria-labelledby="graphics-title">
@@ -83,5 +91,6 @@
   <script src="js/logo.i18n.js"></script>
   <script src="js/logo.js"></script>
   <script src="js/site.js"></script>
+  <script type="module" src="js/blocks.js"></script>
 </body>
 </html>

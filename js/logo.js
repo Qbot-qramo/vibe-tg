@@ -45,7 +45,9 @@ class Tokenizer {
         "MULTIPLIEDBY": "*",
         "DIVIDEDBY": "/",
         "GREATERTHAN": ">",
-        "LESSERTHAN": "<"
+        "LESSERTHAN": "<",
+        "OPENING_PARENTHESIS": "(",
+        "CLOSING_PARENTHESIS": ")"
     };
     static primitives = {
         "NONE": 0,
@@ -471,6 +473,17 @@ class Parser {
                 result.value = this.assignVariable(this.currentToken.text);
                 this.getNextToken();
                 break;
+            case Tokenizer.tokenTypes.DELIMITER:
+                if (this.currentToken.text === Tokenizer.delimiters.OPENING_PARENTHESIS) {
+                    this.getNextToken();
+                    this.getExpression_AdditionOrSubtraction(result);
+                    if (this.currentToken.text === Tokenizer.delimiters.CLOSING_PARENTHESIS) {
+                        this.getNextToken();
+                        break;
+                    }
+                }
+                this.raiseErrorEvent(Parser.errors.EXPECTED_NUMBER_OR_VARIABLE, [ this.currentToken.text ]);
+                break;
             default:
                 this.raiseErrorEvent(Parser.errors.EXPECTED_NUMBER_OR_VARIABLE, [ this.currentToken.text ]);
                 break;
@@ -676,8 +689,16 @@ class Parser {
     skipCodeBlock() {
         this.getNextToken();
         if (this.currentToken.text === Tokenizer.delimiters.OPENING_BRACKET) {
-            while (this.currentToken.text !== Tokenizer.delimiters.CLOSING_BRACKET) {
+            let depth = 1;
+            while (depth > 0 && !this.isEndOfScript()) {
                 this.getNextToken();
+                if (this.currentToken.tokenType === Tokenizer.tokenTypes.DELIMITER) {
+                    if (this.currentToken.text === Tokenizer.delimiters.OPENING_BRACKET) {
+                        depth++;
+                    } else if (this.currentToken.text === Tokenizer.delimiters.CLOSING_BRACKET) {
+                        depth--;
+                    }
+                }
             }
         } else {
             this.raiseErrorEvent(Parser.errors.CODEBLOCK_EXPECTED_OPENING_BRACKET, []);
