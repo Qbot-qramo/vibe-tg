@@ -7,7 +7,6 @@ const SCRATCH_BLOCKS_MEDIA = `https://cdn.jsdelivr.net/npm/scratch-blocks@${SCRA
 const VIEW_STORAGE_KEY = 'vibe-tg-editor-view';
 
 const editor = document.getElementById('logo-editor');
-const workbench = document.querySelector('.workbench');
 const blocksTab = document.getElementById('tab-blocks');
 const editorHelp = document.getElementById('editor-help');
 
@@ -737,7 +736,6 @@ function showView(name) {
     tab.setAttribute('aria-selected', String(selected));
     tab.tabIndex = selected ? 0 : -1;
   });
-  workbench.classList.toggle('is-wide', name !== 'text');
   editorHelp.textContent = HELP_TEXT[name];
   if (name === 'blocks' && workspace) SB.svgResize(workspace);
 }

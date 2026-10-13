@@ -19,7 +19,7 @@ vibe-tg : Vibe Turtle Graphics の実装メモです。次に作業する人（�
 | ファイル | 役割 |
 |---|---|
 | `index.html` | 画面構成。タブ、各パネル、Chat 設定ダイアログ |
-| `css/logo.css` | 全スタイル。600px / 850px でレスポンシブ切り替え |
+| `css/logo.css` | 全スタイル。上部の操作列と作業領域は同じ2列グリッド（左＝エディタ可変、右＝実行画面 `--stage-width` 固定）。描画枠と編集欄の高さは `--work-height`。1100px / 850px / 600px でレスポンシブ切り替え |
 | `js/logo.js` | 上流由来の LOGO インタプリタ（Tokenizer / Parser / Turtle / Interpreter）。グローバルに `interpreter` を作る |
 | `js/logo.i18n.js` | 上流由来。英語・スペイン語のコマンド別名、エラー文、サンプル |
 | `js/site.js` | 日本語 UI の補助。初期コード、⌘/Ctrl+Enter（コードタブ） |

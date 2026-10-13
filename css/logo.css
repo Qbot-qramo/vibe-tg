@@ -10,6 +10,13 @@
   --green-dark: #115444;
   --mint: #d9f2e8;
   --shadow: 0 18px 55px rgba(16, 43, 57, .08);
+  /* The stage column is fixed so the canvas keeps its size; panel padding (2 x 19px) + borders leave a square frame. */
+  --stage-width: 520px;
+  --work-height: 480px;
+  --run: #4cbf56;
+  --run-dark: #45993d;
+  --stop: #ec5959;
+  --stop-dark: #d14545;
   font-family: Inter, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -90,12 +97,15 @@ h1 { margin: 0; font-size: clamp(26px, 4vw, 36px); letter-spacing: -.04em; line-
   box-shadow: 0 0 0 3px rgba(54, 167, 126, .13);
 }
 
-.controls {
+.controls, .workbench {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.2fr 1.65fr 1.25fr;
-  gap: 10px;
-  margin-bottom: 14px;
+  grid-template-columns: minmax(0, 1fr) var(--stage-width);
+  gap: 16px;
 }
+.controls { margin-bottom: 14px; }
+.controls-group { display: grid; gap: 10px; min-width: 0; }
+.controls-editor { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
+.controls-stage { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .controls button, .controls select {
   width: 100%;
   border: 1px solid var(--line);
@@ -108,17 +118,13 @@ h1 { margin: 0; font-size: clamp(26px, 4vw, 36px); letter-spacing: -.04em; line-
 .controls button { cursor: pointer; transition: background .15s ease, transform .15s ease, border-color .15s ease; }
 .controls button:hover { border-color: #a7c9bb; background: #f8fcfa; }
 .controls button:active { transform: translateY(1px); }
-#logo-run { border-color: var(--green); color: #fff; background: var(--green); }
-#logo-run:hover { border-color: var(--green-dark); background: var(--green-dark); }
-#logo-stop { color: #7e3f30; }
+#logo-run { border-color: var(--run); color: #fff; background: var(--run); }
+#logo-run:hover { border-color: var(--run-dark); background: var(--run-dark); }
+#logo-stop { border-color: var(--stop); color: #fff; background: var(--stop); }
+#logo-stop:hover { border-color: var(--stop-dark); background: var(--stop-dark); }
 .controls select { padding: 0 34px 0 12px; cursor: pointer; }
 
-.workbench {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  align-items: stretch;
-  gap: 16px;
-}
+.workbench { align-items: stretch; }
 .panel {
   min-width: 0;
   padding: 19px;
@@ -146,7 +152,7 @@ kbd {
   display: block;
   width: 100%;
   min-height: 380px;
-  height: clamp(380px, 52vh, 560px);
+  height: var(--work-height);
   padding: 17px;
   resize: vertical;
   border: 1px solid #d7e4df;
@@ -158,7 +164,6 @@ kbd {
   tab-size: 2;
 }
 #logo-editor:focus { border-color: #6bab91; box-shadow: 0 0 0 3px rgba(54, 167, 126, .12); }
-.workbench.is-wide { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
 .view-tabs {
   display: inline-flex;
   flex: 0 0 auto;
@@ -184,7 +189,7 @@ kbd {
 .editor-view[hidden] { display: none; }
 .blocks-workspace {
   width: 100%;
-  height: clamp(380px, 52vh, 560px);
+  height: var(--work-height);
   overflow: hidden;
   border: 1px solid #d7e4df;
   border-radius: 11px;
@@ -194,7 +199,7 @@ kbd {
 .chat-view {
   display: flex;
   flex-direction: column;
-  height: clamp(380px, 52vh, 560px);
+  height: var(--work-height);
   overflow: hidden;
   border: 1px solid #d7e4df;
   border-radius: 11px;
@@ -355,7 +360,7 @@ kbd {
 .canvas-frame {
   display: grid;
   min-height: 380px;
-  height: clamp(380px, 52vh, 560px);
+  height: var(--work-height);
   place-items: center;
   overflow: hidden;
   border: 1px solid #d7e4df;
@@ -415,9 +420,13 @@ kbd {
   border: 0;
 }
 
+@media (max-width: 1100px) {
+  :root { --stage-width: 440px; --work-height: 400px; }
+}
 @media (max-width: 850px) {
   .app-shell { width: min(700px, calc(100% - 32px)); padding-top: 30px; }
-  .workbench, .workbench.is-wide { grid-template-columns: 1fr; }
+  .controls, .workbench { grid-template-columns: 1fr; }
+  .controls { gap: 10px; }
   .blocks-workspace, .chat-view { height: 460px; }
   #logo-editor, .canvas-frame { height: auto; min-height: 0; }
   #logo-editor { min-height: 330px; }
@@ -430,9 +439,8 @@ kbd {
   .brand-mark { flex-basis: 44px; width: 44px; height: 44px; border-radius: 14px; font-size: 29px; }
   .runtime-badge { display: none; }
   .intro { font-size: 12px; }
-  .controls { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .controls, .controls-group { gap: 8px; }
   .controls button, .controls select { min-width: 0; min-height: 43px; padding-right: 8px; padding-left: 8px; font-size: 11px; }
-  .controls .examples-select { grid-column: span 2; }
   .panel { padding: 14px; border-radius: 14px; }
   .panel-heading { align-items: flex-start; }
   .key-hint { white-space: normal; line-height: 1.7; }
