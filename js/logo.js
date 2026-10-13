@@ -558,7 +558,8 @@ class Parser {
         }
     }
     parse(tokens) {
-        this.initializeParsing(tokens);        
+        clearInterval(this.parsingLoop); // A new run replaces one that is still in progress
+        this.initializeParsing(tokens);
 
         this.raiseStatusEvent(Parser.events.statusEvent.values.START_PARSING);
 

@@ -17,7 +17,14 @@
 
 - 式の中で括弧 `( )` を使えるようにした（ブロックで組んだ入れ子の計算をテキストで表すため）。
 - 条件が偽の `IF` を読み飛ばすとき、ブロック内の入れ子の `[ ]` を正しく数えるようにした（以前は最初の `]` で止まっていた）。
+- 実行中にもう一度実行したとき、前の実行ループを止めてから始めるようにした（以前は2つのループが同時に動いていた）。
 
 ## Scratch Blocks
 
 ブロックエディター（`js/blocks.js`）は [scratchfoundation/scratch-blocks](https://github.com/scratchfoundation/scratch-blocks)（Apache License 2.0、Blocklyを含む）を利用しています。リポジトリには同梱せず、実行時にjsDelivrから固定バージョン（`js/blocks.js` の `SCRATCH_BLOCKS_VERSION`）を読み込みます。Scratchの名称・ロゴ等はScratch Foundationの商標であり、本プロジェクトはScratch Foundationとは関係ありません。
+
+## WebLLM と AI モデル
+
+AI Chat（`js/chat.js`、`js/llm-worker.js`）は [mlc-ai/web-llm](https://github.com/mlc-ai/web-llm)（Apache License 2.0）を利用しています。リポジトリには同梱せず、実行時に jsDelivr から固定バージョン（`js/webllm.js`）を読み込みます。
+
+モデルの重みは、利用者が「モデルを読み込む」を押したときに Hugging Face（mlc-ai）から利用者のブラウザーへ直接ダウンロードされます。本リポジトリでは再配布していません。各モデルにはそれぞれのライセンスがあります（例：Qwen は Apache 2.0、Phi-4-mini は MIT、Llama 3.2 は Llama 3.2 Community License）。

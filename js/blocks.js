@@ -1,4 +1,4 @@
-// Block editor for LOGO Turtle Studio, built on Scratch Blocks.
+// Block editor for vibe-tg (Vibe Turtle Graphics), built on Scratch Blocks.
 // The textarea stays the single source the interpreter runs; this module keeps it in sync with the block workspace.
 
 const SCRATCH_BLOCKS_VERSION = '2.1.19';
@@ -8,13 +8,17 @@ const VIEW_STORAGE_KEY = 'vibe-tg-editor-view';
 
 const editor = document.getElementById('logo-editor');
 const workbench = document.querySelector('.workbench');
-const blocksView = document.getElementById('blocks-view');
-const textView = document.getElementById('text-view');
 const blocksTab = document.getElementById('tab-blocks');
-const textTab = document.getElementById('tab-text');
 const editorHelp = document.getElementById('editor-help');
 
+const VIEWS = {
+  chat: { tab: document.getElementById('tab-chat'), panel: document.getElementById('chat-view') },
+  blocks: { tab: blocksTab, panel: document.getElementById('blocks-view') },
+  text: { tab: document.getElementById('tab-text'), panel: document.getElementById('text-view') }
+};
+
 const HELP_TEXT = {
+  chat: '描きたい絵を日本語で伝えると、ブラウザー内のAIがLOGOのコードを書いて実行します。モデルや指示文は「設定」で変えられます。',
   blocks: '左のパレットからブロックをドラッグし、「旗が押されたとき」の下につなげます。定義ブロックで自分の命令も作れます。',
   text: 'コマンドは英語またはスペイン語です。例を選ぶとコードを読み込めます。'
 };
@@ -456,8 +460,8 @@ function hasStartBlock() {
 
 class ConversionError extends Error {}
 
-function textToWorkspaceState(text) {
-  const tokens = interpreter.tokenizer.tokenize(text)
+function textToWorkspaceState(text, tokenizer = interpreter.tokenizer) {
+  const tokens = tokenizer.tokenize(text)
     .filter(token => !(token.tokenType === Tokenizer.tokenTypes.DELIMITER && token.text === Tokenizer.LF));
   const unknown = tokens.find(token => token.tokenType === Tokenizer.tokenTypes.UNKNOWN_TOKEN);
   if (unknown) throw new ConversionError(`認識できない記号「${unknown.text}」があります。`);
@@ -472,6 +476,7 @@ function textToWorkspaceState(text) {
   });
 
   let index = 0;
+  let scopeParams = [];
   const peek = () => tokens[index];
   const next = () => tokens[index++];
   const isDelimiter = (token, text) => token?.tokenType === Tokenizer.tokenTypes.DELIMITER && token.text === text;
@@ -486,7 +491,11 @@ function textToWorkspaceState(text) {
     const token = next();
     if (token?.tokenType === Tokenizer.tokenTypes.NUMBER) return { number: Number(token.text) };
     if (token?.tokenType === Tokenizer.tokenTypes.VARIABLE) {
-      return { block: { type: 'logo_param', fields: { NAME: token.text.slice(1) } } };
+      const name = token.text.slice(1);
+      if (!scopeParams.includes(name)) {
+        throw new ConversionError(`「${token.text}」は、それを引数に持つ定義の中でしか使えません。`);
+      }
+      return { block: { type: 'logo_param', fields: { NAME: name } } };
     }
     if (isDelimiter(token, Tokenizer.delimiters.OPENING_PARENTHESIS)) {
       const inner = additive();
@@ -590,10 +599,12 @@ function textToWorkspaceState(text) {
       }
       const params = [];
       while (peek()?.tokenType === Tokenizer.tokenTypes.VARIABLE) params.push(next().text.slice(1));
+      scopeParams = params;
       const statements = [];
       while (peek() && peek().primitive !== Tokenizer.primitives.END) statements.push(statement());
       if (!peek()) throw new ConversionError(`定義「${nameToken.text}」の終わり（${keyword('END')}）がありません。`);
       next();
+      scopeParams = [];
       const def = { type: 'logo_procedure_def', fields: { NAME: nameToken.text, PARAMS: params.join(' ') } };
       const first = chain(statements);
       if (first) def.next = { block: first };
@@ -642,8 +653,8 @@ function onWorkspaceChange(event) {
   lastSyncedText = code;
 }
 
-function loadText(text) {
-  const state = textToWorkspaceState(text);
+
+function loadState(state) {
   isLoading = true;
   SB.Events.disable();
   try {
@@ -655,8 +666,12 @@ function loadText(text) {
     isLoading = false;
   }
   workspace.clearUndo();
-  lastSyncedText = text;
   refreshToolboxSoon();
+}
+
+function loadText(text) {
+  loadState(textToWorkspaceState(text));
+  lastSyncedText = text;
 }
 
 // Only works while the workspace is visible, because Blockly needs real metrics.
@@ -665,6 +680,43 @@ function scrollToStart() {
   if (!first) return;
   const position = first.getRelativeToSurfaceXY();
   workspace.scroll(24 - position.x * workspace.scale, 24 - position.y * workspace.scale);
+}
+
+// ---------- API for the chat assistant ----------
+
+function englishTokenizer() {
+  return new Tokenizer(i18n.English.primitiveAliases);
+}
+
+/** Returns null when the English LOGO program can be converted to blocks, otherwise the reason it cannot. */
+export function checkProgram(text) {
+  if (!text.trim()) return 'プログラムが空です。';
+  try {
+    textToWorkspaceState(text, englishTokenizer());
+    return null;
+  } catch (error) {
+    if (error instanceof ConversionError) return error.message;
+    throw error;
+  }
+}
+
+/** Puts an English LOGO program into the editor (and blocks), rewritten in the currently selected LOGO language. */
+export function applyProgram(text) {
+  if (!workspace) {
+    editor.value = text;
+    return text;
+  }
+  loadState(textToWorkspaceState(text, englishTokenizer()));
+  const code = generateCode();
+  editor.value = code;
+  lastSyncedText = code;
+  if (view === 'blocks') scrollToStart();
+  return code;
+}
+
+export function selectView(name) {
+  if (name === 'blocks') switchToBlocks();
+  else switchTo(name);
 }
 
 // ---------- View switching ----------
@@ -679,16 +731,15 @@ function savedView() {
 
 function showView(name) {
   view = name;
-  const isBlocks = name === 'blocks';
-  blocksView.hidden = !isBlocks;
-  textView.hidden = isBlocks;
-  blocksTab.setAttribute('aria-selected', String(isBlocks));
-  textTab.setAttribute('aria-selected', String(!isBlocks));
-  blocksTab.tabIndex = isBlocks ? 0 : -1;
-  textTab.tabIndex = isBlocks ? -1 : 0;
-  workbench.classList.toggle('is-blocks', isBlocks);
+  Object.entries(VIEWS).forEach(([key, { tab, panel }]) => {
+    const selected = key === name;
+    panel.hidden = !selected;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  });
+  workbench.classList.toggle('is-wide', name !== 'text');
   editorHelp.textContent = HELP_TEXT[name];
-  if (isBlocks && workspace) SB.svgResize(workspace);
+  if (name === 'blocks' && workspace) SB.svgResize(workspace);
 }
 
 function switchToBlocks() {
@@ -699,7 +750,7 @@ function switchToBlocks() {
       loadText(editor.value);
     } catch (error) {
       if (!(error instanceof ConversionError)) throw error;
-      setStatus(`ブロックに変換できませんでした：${error.message} テキストを直してからもう一度切り替えてください。`);
+      setStatus(`ブロックに変換できませんでした：${error.message} コードを直してからもう一度切り替えてください。`);
       return;
     }
   }
@@ -708,21 +759,26 @@ function switchToBlocks() {
   if (needsLoad) scrollToStart();
 }
 
-function switchToText() {
-  showView('text');
-  saveView('text');
+function switchTo(name) {
+  showView(name);
+  saveView(name);
 }
 
 function setupTabs() {
-  blocksTab.addEventListener('click', switchToBlocks);
-  textTab.addEventListener('click', switchToText);
-  [blocksTab, textTab].forEach(tab => tab.addEventListener('keydown', event => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
-    event.preventDefault();
-    const target = tab === blocksTab ? textTab : blocksTab;
-    target.click();
-    if (target.getAttribute('aria-selected') === 'true') target.focus();
-  }));
+  const names = Object.keys(VIEWS);
+  names.forEach(name => {
+    const tab = VIEWS[name].tab;
+    tab.addEventListener('click', () => selectView(name));
+    tab.addEventListener('keydown', event => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      event.preventDefault();
+      const step = event.key === 'ArrowRight' ? 1 : -1;
+      const enabled = names.filter(n => !VIEWS[n].tab.disabled);
+      const target = VIEWS[enabled[(enabled.indexOf(name) + step + enabled.length) % enabled.length]].tab;
+      target.click();
+      if (target.getAttribute('aria-selected') === 'true') target.focus();
+    });
+  });
 }
 
 function hookInterpreter() {
@@ -735,8 +791,8 @@ function hookInterpreter() {
       scrollToStart();
     } catch (error) {
       if (!(error instanceof ConversionError)) throw error;
-      switchToText();
-      setStatus(`このプログラムはブロックで表示できないため、テキスト表示に切り替えました：${error.message}`);
+      switchTo('text');
+      setStatus(`このプログラムはブロックで表示できないため、コード表示に切り替えました：${error.message}`);
     }
   };
 
@@ -768,6 +824,7 @@ function fitFlyoutToNarrowScreen() {
 async function init() {
   setupTabs();
   const isNarrow = window.matchMedia('(max-width: 600px)').matches;
+  const preferred = savedView() ?? 'blocks';
   try {
     SB = await import(SCRATCH_BLOCKS_URL);
     SB.ScratchMsgs.setLocale('ja');
@@ -787,8 +844,8 @@ async function init() {
     console.error(error);
     workspace = null;
     blocksTab.disabled = true;
-    showView('text');
-    setStatus('ブロックエディタを読み込めませんでした（ネットワーク接続を確認してください）。テキストで編集できます。');
+    showView(preferred === 'chat' ? 'chat' : 'text');
+    setStatus('ブロックエディタを読み込めませんでした（ネットワーク接続を確認してください）。コードで編集できます。');
     return;
   }
   // Recycled flyout blocks are reused by type without reapplying fields, so parameter blocks would keep stale names.
@@ -797,7 +854,8 @@ async function init() {
   hookInterpreter();
 
   showView('text');
-  if ((savedView() ?? 'blocks') === 'blocks') switchToBlocks();
+  if (preferred === 'blocks') switchToBlocks();
+  else if (preferred === 'chat') switchTo('chat');
 }
 
 init();

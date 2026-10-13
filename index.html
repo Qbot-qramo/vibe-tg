@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#102b39">
   <meta name="description" content="ブラウザーでLOGOのタートルグラフィックスを実行できる、GitHub Pages対応スターターです。">
-  <title>LOGO Turtle Studio</title>
+  <title>vibe-tg : Vibe Turtle Graphics</title>
   <link rel="icon" href="img/favicon.ico">
   <link rel="stylesheet" href="css/logo.css">
 </head>
@@ -15,7 +15,7 @@
       <div class="brand-mark" aria-hidden="true">⌁</div>
       <div class="hero-copy">
         <p class="eyebrow">BROWSER-BASED LOGO PLAYGROUND</p>
-        <h1>LOGO Turtle Studio</h1>
+        <h1>vibe-tg : Vibe Turtle Graphics</h1>
         <p class="intro">コードを書いて、タートルを動かしてみましょう。インストール不要で、このページだけで動作します。</p>
       </div>
       <span class="runtime-badge"><span aria-hidden="true"></span> ブラウザー内で実行</span>
@@ -44,9 +44,27 @@
             <h2 id="editor-title">プログラム</h2>
           </div>
           <div class="view-tabs" role="tablist" aria-label="編集方法">
+            <button type="button" role="tab" id="tab-chat" aria-selected="false" aria-controls="chat-view" tabindex="-1">Chat</button>
             <button type="button" role="tab" id="tab-blocks" aria-selected="false" aria-controls="blocks-view" tabindex="-1">ブロック</button>
-            <button type="button" role="tab" id="tab-text" aria-selected="true" aria-controls="text-view">テキスト</button>
+            <button type="button" role="tab" id="tab-text" aria-selected="true" aria-controls="text-view">コード</button>
           </div>
+        </div>
+        <div id="chat-view" class="editor-view chat-view" role="tabpanel" aria-labelledby="tab-chat" hidden>
+          <div class="chat-toolbar">
+            <span id="chat-model-status" class="chat-model-status">モデル未読み込み</span>
+            <button type="button" id="chat-load" class="chat-button">モデルを読み込む</button>
+            <button type="button" id="chat-settings-open" class="chat-button" aria-haspopup="dialog">⚙ 設定</button>
+          </div>
+          <div id="chat-progress" class="chat-progress" hidden>
+            <progress id="chat-progress-bar" max="1" value="0"></progress>
+            <span id="chat-progress-text"></span>
+          </div>
+          <div id="chat-log" class="chat-log" aria-live="polite"></div>
+          <form id="chat-form" class="chat-form">
+            <label class="sr-only" for="chat-input">AIへの依頼</label>
+            <textarea id="chat-input" rows="2" placeholder="例：家を描いて（Enterで送信、Shift+Enterで改行）" disabled></textarea>
+            <button type="submit" id="chat-send" class="chat-send" disabled>送信</button>
+          </form>
         </div>
         <div id="blocks-view" class="editor-view" role="tabpanel" aria-labelledby="tab-blocks" hidden>
           <div id="blocks-workspace" class="blocks-workspace"></div>
@@ -78,7 +96,7 @@
     </section>
 
     <footer class="site-footer">
-      <p>LOGO Turtle Studio · 静的サイトとしてGitHub Pagesで公開できます。</p>
+      <p>vibe-tg : Vibe Turtle Graphics · 静的サイトとしてGitHub Pagesで公開できます。</p>
       <a href="https://github.com/oliverius/logo" target="_blank" rel="noopener noreferrer">
         <img src="img/GitHub-Mark-Light-32px.png" alt="" width="16" height="16">
         上流プロジェクト: oliverius/logo
@@ -91,6 +109,42 @@
   <script src="js/logo.i18n.js"></script>
   <script src="js/logo.js"></script>
   <script src="js/site.js"></script>
+  <dialog id="chat-settings" class="settings-dialog" aria-labelledby="chat-settings-title">
+    <form method="dialog" id="chat-settings-form">
+      <h2 id="chat-settings-title">AI Chat の設定</h2>
+      <div class="settings-grid">
+        <label for="setting-model">モデル</label>
+        <div class="settings-model-row">
+          <select id="setting-model"></select>
+          <button type="button" id="setting-delete-model" class="chat-button">保存データを削除</button>
+        </div>
+        <label for="setting-temperature">温度（ランダムさ）</label>
+        <input id="setting-temperature" type="number" min="0" max="1.5" step="0.1">
+        <label for="setting-retries">エラー時の再試行回数</label>
+        <input id="setting-retries" type="number" min="0" max="5" step="1">
+        <label for="setting-max-tokens">最大出力トークン数</label>
+        <input id="setting-max-tokens" type="number" min="256" max="2048" step="64">
+        <span>オプション</span>
+        <div class="settings-checks">
+          <label><input id="setting-grammar" type="checkbox"> LOGOの文法で出力を制約する（実験的）</label>
+          <label><input id="setting-include-code" type="checkbox"> 今のプログラムを依頼と一緒に渡す</label>
+          <label><input id="setting-auto-run" type="checkbox"> 生成したら自動で実行する</label>
+        </div>
+      </div>
+      <div class="settings-prompt-heading">
+        <label for="setting-system-prompt">システムプロンプト</label>
+        <button type="button" id="setting-reset-prompt" class="chat-button">既定に戻す</button>
+      </div>
+      <textarea id="setting-system-prompt" rows="14" spellcheck="false"></textarea>
+      <p class="settings-note">モデルは初回だけダウンロードされ、以降はブラウザーに保存されたものを使います。設定はこのブラウザーにだけ保存されます。</p>
+      <div class="settings-actions">
+        <button type="button" id="chat-settings-cancel" class="chat-button">キャンセル</button>
+        <button type="submit" id="chat-settings-save" class="chat-send">保存</button>
+      </div>
+    </form>
+  </dialog>
+
   <script type="module" src="js/blocks.js"></script>
+  <script type="module" src="js/chat.js"></script>
 </body>
 </html>
