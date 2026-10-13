@@ -1,6 +1,8 @@
 // Block editor for vibe-tg (Vibe Turtle Graphics), built on Scratch Blocks.
 // The textarea stays the single source the interpreter runs; this module keeps it in sync with the block workspace.
 
+import { runBlockTests } from '../test/blocktests.js';
+
 const SCRATCH_BLOCKS_VERSION = '2.1.19';
 const SCRATCH_BLOCKS_URL = `https://cdn.jsdelivr.net/npm/scratch-blocks@${SCRATCH_BLOCKS_VERSION}/dist/main.mjs`;
 const SCRATCH_BLOCKS_MEDIA = `https://cdn.jsdelivr.net/npm/scratch-blocks@${SCRATCH_BLOCKS_VERSION}/media/`;
@@ -54,7 +56,12 @@ const PLAIN_STATEMENTS = {
   logo_clean: { primitive: 'CLEAN', message: '描いた線だけ消す', colour: 'pen' },
   logo_showturtle: { primitive: 'SHOWTURTLE', message: 'タートルを表示する', colour: 'looks' },
   logo_hideturtle: { primitive: 'HIDETURTLE', message: 'タートルを隠す', colour: 'looks' },
-  logo_stop: { primitive: 'STOP', message: 'この定義を抜ける', colour: 'control' }
+  logo_stop: {
+    primitive: 'STOP',
+    message: '止める',
+    colour: 'control',
+    tooltip: '定義の中ではその定義を抜けます。「旗が押されたとき」の下ではプログラム全体を止めます。'
+  }
 };
 
 const ARITHMETIC = {
@@ -97,8 +104,11 @@ function setStatus(message) {
 
 // ---------- LOGO keyword helpers ----------
 
+// Set only while generating code for a language other than the selected one (the block tests do this).
+let codeLocale = null;
+
 function keyword(primitive) {
-  const entry = interpreter.locale.primitiveAliases.find(item => item.primitive === primitive);
+  const entry = (codeLocale ?? interpreter.locale).primitiveAliases.find(item => item.primitive === primitive);
   return entry.aliases[entry.aliases.length - 1];
 }
 
@@ -159,6 +169,7 @@ function defineBlocks() {
     Blocks[type] = {
       init() {
         this.jsonInit({ message0: spec.message, extensions: [`colours_${spec.colour}`, 'shape_statement'] });
+        if (spec.tooltip) this.setTooltip(spec.tooltip);
       }
     };
   });
@@ -433,8 +444,8 @@ function sequenceLines(first) {
   return lines;
 }
 
-function generateCode() {
-  const topBlocks = workspace.getTopBlocks(true);
+function generateCode(source = workspace) {
+  const topBlocks = source.getTopBlocks(true);
   const sections = [];
   topBlocks.filter(b => b.type === 'logo_procedure_def').forEach(def => {
     const params = parseParams(def.getFieldValue('PARAMS')).map(p => `:${p}`);
@@ -522,8 +533,10 @@ function textToWorkspaceState(text, tokenizer = interpreter.tokenizer) {
   }
 
   function colourInput(expr) {
-    if (expr.number !== undefined && expr.number < COLOURS.length) return colourShadow(expr.number);
-    return toInput(expr, colourShadow);
+    if (expr.number === undefined) return toInput(expr, colourShadow);
+    if (expr.number < COLOURS.length) return colourShadow(expr.number);
+    // The colour menu only has 0-15, so keep any other number as a plain number block instead of losing it.
+    return { ...colourShadow(0), block: { type: 'math_whole_number', fields: { NUM: expr.number } } };
   }
 
   function body() {
@@ -713,6 +726,20 @@ export function applyProgram(text) {
   return code;
 }
 
+/** Converts a program to blocks and back on a throwaway workspace, in the given LOGO language (used by the tests). */
+export function roundTripProgram(text, language) {
+  const locale = i18n[language];
+  const scratch = new SB.Workspace(new SB.Options({ media: SCRATCH_BLOCKS_MEDIA }));
+  codeLocale = locale;
+  try {
+    SB.serialization.workspaces.load(textToWorkspaceState(text, new Tokenizer(locale.primitiveAliases)), scratch);
+    return generateCode(scratch);
+  } finally {
+    codeLocale = null;
+    scratch.dispose();
+  }
+}
+
 export function selectView(name) {
   if (name === 'blocks') switchToBlocks();
   else switchTo(name);
@@ -850,6 +877,7 @@ async function init() {
   workspace.getFlyout().setRecyclingEnabled(false);
   workspace.addChangeListener(onWorkspaceChange);
   hookInterpreter();
+  runBlockTests({ checkProgram, roundTripProgram });
 
   showView('text');
   if (preferred === 'blocks') switchToBlocks();

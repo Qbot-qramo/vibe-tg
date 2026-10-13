@@ -36,7 +36,7 @@ The interpreter understands only these commands. Anything else is an error.
 - repeat N [ commands ]
 - if A < B [ commands ] and if A > B [ commands ]
 - wait N: wait N/100 seconds
-- to NAME :a :b ... end: define a procedure, then call it as NAME 10 20. stop leaves the current procedure.
+- to NAME :a :b ... end: define a procedure, then call it as NAME 10 20. stop leaves the current procedure (outside a procedure it ends the program).
 
 Rules:
 - Numbers are whole numbers 0 or greater. No decimals and no negative numbers: use lt instead of rt -90, bk instead of fd -10.

@@ -260,7 +260,8 @@ class Parser {
         "PROCEDURE_NOT_DEFINED": 4,
         "PROCEDURE_WITHOUT_END_TOKEN": 5,
         "UNKNOWN_TOKEN_FOUND": 6,
-        "UNMATCHED_CLOSING_BRACKET": 7
+        "UNMATCHED_CLOSING_BRACKET": 7,
+        "CODEBLOCK_EXPECTED_CLOSING_BRACKET": 8
     };
     static events = {
         "errorEvent": {
@@ -338,6 +339,11 @@ class Parser {
     }
     execute_end() {
         let item = this.procedureCallStack.pop();
+        if (item === undefined) {
+            return; // A stray END outside any procedure call
+        }
+        // A STOP inside IF or REPEAT leaves the procedure without closing those code blocks, so drop them here
+        this.codeBlockStack.length = item.codeBlockStackLength;
         this.setCurrentTokenIndex(item.procedureCallLastTokenIndex);
     }
     execute_if() {
@@ -364,6 +370,10 @@ class Parser {
         this.beginCodeBlock(Tokenizer.primitives.REPEAT, n);
     }
     execute_stop() {
+        if (this.procedureCallStack.length === 0) {
+            this.stopParsing(); // Outside a procedure STOP ends the whole program
+            return;
+        }
         this.skipUntilEndOfProcedure(); // The STOP will be inside a procedure, so we don't do anything until we reach the end
         this.putBackToken(); // So the END primitive will be the next one read in the next parsing step and we execute the END primitive code.
     }
@@ -522,6 +532,26 @@ class Parser {
         this.procedureCallStack = [];
         this.pauseParsingRequested = false;
         this.stopParsingRequested = false;
+
+        if (this.hasUnclosedCodeBlock(tokens)) {
+            this.raiseErrorEvent(Parser.errors.CODEBLOCK_EXPECTED_CLOSING_BRACKET, []);
+            this.stopParsing();
+        }
+    }
+    hasUnclosedCodeBlock(tokens = []) {
+        // Checked before running because the code block stack cannot tell an unclosed [ apart at the end of the script
+        let depth = 0;
+        tokens.forEach(token => {
+            if (token.tokenType !== Tokenizer.tokenTypes.DELIMITER) {
+                return;
+            }
+            if (token.text === Tokenizer.delimiters.OPENING_BRACKET) {
+                depth++;
+            } else if (token.text === Tokenizer.delimiters.CLOSING_BRACKET && depth > 0) {
+                depth--;
+            }
+        });
+        return depth > 0;
     }
     isEndOfScript() {
         return this.currentToken.tokenType === Tokenizer.tokenTypes.END_OF_TOKEN_STREAM;
@@ -547,7 +577,8 @@ class Parser {
             let procedureCallStackItem = {
                 name : procedure.name,
                 inputs: assignedInputs,
-                procedureCallLastTokenIndex: this.currentTokenIndex
+                procedureCallLastTokenIndex: this.currentTokenIndex,
+                codeBlockStackLength: this.codeBlockStack.length
             };
 
             this.procedureCallStack.push(procedureCallStackItem);
@@ -995,12 +1026,13 @@ class Turtle {
         this.renderFrame();
     }
     getColor(colorIndex = 0) {
-        if (colorIndex < 0 || colorIndex > Turtle.colors.length) {
+        let index = Math.trunc(colorIndex); // Expressions such as 7 / 2 can produce fractions
+        if (!(index >= 0 && index < Turtle.colors.length)) {
             // It is easier to just paint black (color 0)
             // than to raise an error
-            colorIndex = 0;
+            index = 0;
         }
-        return Turtle.colors[colorIndex].color;
+        return Turtle.colors[index].color;
     }
     increaseTurtleHeading(deg = 0) {
         this.heading += deg;
@@ -1040,6 +1072,7 @@ class Interpreter {
 
         runTokenizerTests(i18n);
         runParserTests(Tokenizer, Parser, i18n);
+        runTurtleTests(Turtle);
 
         this.setUI(examplesDropdownId, languageDropdownId);
         
@@ -1073,6 +1106,9 @@ class Interpreter {
                     break;
                 case Parser.errors.UNMATCHED_CLOSING_BRACKET:
                     message = this.locale.errors.UNMATCHED_CLOSING_BRACKET;
+                    break;
+                case Parser.errors.CODEBLOCK_EXPECTED_CLOSING_BRACKET:
+                    message = this.locale.errors.CODEBLOCK_EXPECTED_CLOSING_BRACKET;
                     break;
             }
             this.setStatusBar(message);

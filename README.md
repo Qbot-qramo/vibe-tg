@@ -55,7 +55,7 @@ python3 -m http.server 8000
 │   ├── chat.js           # AI Chat（WebLLM）
 │   ├── llm-worker.js     # WebLLMを動かすWeb Worker
 │   └── webllm.js         # WebLLMの読み込み先
-└── test/                 # 上流プロジェクトのブラウザー内テスト
+└── test/                 # ブラウザー内テスト（ページを開くと自動実行、結果はconsole）
 ```
 
 `css/logo.css` はレスポンシブ表示に合わせて調整しています。インタプリタ本体と言語定義、テストは上流プロジェクト由来です。出典・ライセンスの詳細は [UPSTREAM.md](UPSTREAM.md) と [LICENSE](LICENSE) を確認してください。

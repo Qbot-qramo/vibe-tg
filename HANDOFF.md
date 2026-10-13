@@ -27,7 +27,9 @@ vibe-tg : Vibe Turtle Graphics の実装メモです。次に作業する人（�
 | `js/chat.js` | ES module。Chat UI、設定、WebLLM の読み込みと生成、検証・再試行 |
 | `js/llm-worker.js` | WebLLM を Web Worker で動かすハンドラー |
 | `js/webllm.js` | WebLLM の CDN URL（ページと Worker で共有） |
-| `test/*.js` | 上流のブラウザー内テスト。`Interpreter` の生成時に自動実行され、結果は console に出る |
+| `test/tokenizertests.js` `test/parsertests.js` | 上流由来のテスト（Parser 側は境界ケースを追加）。`Interpreter` の生成時に自動実行され、結果は console に出る |
+| `test/turtletests.js` | 色番号の範囲などタートル描画のテスト。`Interpreter` の生成時に自動実行 |
+| `test/blocktests.js` | ES module。ブロック変換の受理／拒否と、全サンプルの往復変換テスト。ブロックエディターの読み込み後に `blocks.js` から自動実行 |
 
 読み込み順: classic script（`test/*`、`logo.i18n.js`、`logo.js`、`site.js`）→ module（`blocks.js`、`chat.js`）。
 
@@ -64,8 +66,28 @@ module からは、classic script のトップレベル宣言（`interpreter`、
 - 式で括弧 `( )` を使えるようにした。ブロックの入れ子の計算を表すために必要。
 - 偽の `IF` を読み飛ばすとき、入れ子の `[ ]` を数えるようにした（上流のバグ修正）。
 - `parse()` の先頭で前回の `setInterval` を止めるようにした。実行中に再実行すると2つのループが同時に走る上流のバグの修正。
+- 色番号は小数を切り捨て、0〜15 の外なら黒にする（以前は 16 や 3.5 で TypeError になり停止）。
+- 実行前に `[` と `]` の対応を調べ、閉じていなければ `CODEBLOCK_EXPECTED_CLOSING_BRACKET` エラーにする（以前は黙って成功扱い）。
+  - 実行終了時のブロックスタックでは判定しないこと。定義内の `stop` で抜けた `if`/`repeat` の記録が残るケースがあったため。
+- 定義の外の `stop` は、プログラム全体を止める（以前は「END がない」という見当違いのエラー）。ブロックの表示は「止める」。
+- 定義を呼んだ時点のブロックスタックの深さを記録し、`end` でそこまで戻す。以前は `if … [stop]` で抜けると、呼び出し側の `repeat` が1回で終わっていた。
+- 定義の外の単独の `end` は無視する（以前は TypeError）。
 
-上流テスト 43件はすべて合格します（console で `runTokenizerTests(i18n); runParserTests(Tokenizer, Parser, i18n)`）。
+## テスト
+
+ページを開くと全テストが自動で実行され、結果が console に `TEST PASSED/FAILED` で出ます（2026-10-13 時点で計102件、全件合格）。
+
+| 種類 | 件数 | 手動で実行するとき（console） |
+|---|---|---|
+| Tokenizer | 26 | `runTokenizerTests(i18n)` |
+| Parser | 27 | `runParserTests(Tokenizer, Parser, i18n)` |
+| Turtle | 8 | `runTurtleTests(Turtle)` |
+| ブロック変換 | 41 | `(await import('./test/blocktests.js')).runBlockTests(await import('./js/blocks.js'))` |
+
+- Parser テストの補助は、期待したイベントと**件数まで一致**することを確かめます。また、アプリと同じくエラーが出たら実行を止めます。
+  - 以前は件数を比べておらず、エラー後に余計な描画をしても合格していました。
+- 上流のテスト補助は、失敗すると例外を投げます。`Interpreter` の生成中に投げると `interpreter` が作られず、アプリ全体が動かなくなります。テストを変えたら、ページが正常に開くことも確認してください。
+- 往復変換テストは、画面に出していないワークスペース（`roundTripProgram`）で行います。ユーザーのブロックには影響しません。
 
 ## Scratch Blocks（`scratch-blocks@2.1.19`）の落とし穴
 
@@ -130,8 +152,7 @@ python3 -m http.server 8000
 ```
 
 - `index.html` を直接開くと、ES module を読めないため Chat とブロックは動きません。
-- 全サンプルの往復変換テスト（テキスト → ブロック → テキストで命令列が一致するか）は、ブラウザー console で各サンプルを読み込み → ブロックを1つ動かす → textarea を Tokenizer で比較する手順で確認しました。
-  - 英語・スペイン語の全16サンプルで一致しています。自動テストとしてはまだリポジトリに入っていません。
+- テストは上の「テスト」の節のとおり、ページを開くと自動で実行されます。
 
 ## LLM 評価メモ
 
@@ -165,4 +186,3 @@ python3 -m http.server 8000
   - 実行中は1トークンごとに `console.log` が出て重い。
   - 定義外で未知の変数を使うと TypeError（コードタブから直接実行した場合）。
 - ブロックの表示文言は日本語のみです。
-- 往復変換テストを `test/` に自動テストとして追加したい。

@@ -101,7 +101,8 @@ const i18n = {
             "PROCEDURE_NOT_DEFINED": "The procedure {0} hasn't been defined yet before using it",
             "PROCEDURE_WITHOUT_END_TOKEN": "Last procedure is missing the primitive 'END'",
             "UNKNOWN_TOKEN_FOUND": "Found a symbol '{0}' that wasn't recognized",
-            "UNMATCHED_CLOSING_BRACKET": "A closing bracket ] was found without a matching opening bracket [ first"
+            "UNMATCHED_CLOSING_BRACKET": "A closing bracket ] was found without a matching opening bracket [ first",
+            "CODEBLOCK_EXPECTED_CLOSING_BRACKET": "A code block opened with [ is missing its closing bracket ]"
         },
         "UI": [
             {
@@ -371,7 +372,8 @@ const i18n = {
             "PROCEDURE_NOT_DEFINED": "El procedimiento {0} tiene que ser definido antes de usarlo",
             "PROCEDURE_WITHOUT_END_TOKEN": "Al último procedimiento le falta la primitiva 'FIN'",
             "UNKNOWN_TOKEN_FOUND": "Hemos encontrado un símbolo '{0}' que no hemos reconocido",
-            "UNMATCHED_CLOSING_BRACKET": "Un corchete ] fue encontrado sin encontrar primero un corchete ["
+            "UNMATCHED_CLOSING_BRACKET": "Un corchete ] fue encontrado sin encontrar primero un corchete [",
+            "CODEBLOCK_EXPECTED_CLOSING_BRACKET": "A un bloque abierto con [ le falta el corchete de cierre ]"
         },
         "UI": [
             {

@@ -38,6 +38,7 @@ function runParserTests(Tokenizer, Parser, i18n) {
         
         window.addEventListener(Parser.events.errorEvent.name, (e) => {
             actualErrorCode = e.detail.errorCode;
+            parser.stopParsing(); // The Interpreter stops at an error too
         }, false);
 
         window.addEventListener(Parser.events.turtleDrawingEvent.name, (e) => {
@@ -70,7 +71,9 @@ function runParserTests(Tokenizer, Parser, i18n) {
             && expectedTurtleDrawingEvent[1] === actualTurtleDrawingEvent.arg;
     };
     let assertTurtleDrawingEvents = (expectedTurtleDrawingEvents = [], actualTurtleDrawingEvents = []) => {
-        return expectedTurtleDrawingEvents.every( (expectedTurtleDrawingEvent, index) =>
+        // Comparing lengths too, so a test also fails when the script draws more than it should (e.g. after STOP)
+        return expectedTurtleDrawingEvents.length === actualTurtleDrawingEvents.length &&
+            expectedTurtleDrawingEvents.every( (expectedTurtleDrawingEvent, index) =>
             assertTurtleDrawingEvent(expectedTurtleDrawingEvent, actualTurtleDrawingEvents[index])
         );
     };
@@ -87,6 +90,9 @@ function runParserTests(Tokenizer, Parser, i18n) {
     tests.push(assertExpression("2 * 15 + 30", 60));
     tests.push(assertExpression("100 / 2 + 10", 60));
     tests.push(assertExpression("2 * 10 + 50 - 70 / 7", 60));
+    tests.push(assertExpression("(2 + 3) * 4", 20));
+    tests.push(assertExpression("100 - (30 - 10)", 80));
+    tests.push(assertExpression("((1 + 2) * (3 + 4))", 21));
 
     tests.push(
         assertScript(
@@ -419,6 +425,90 @@ function runParserTests(Tokenizer, Parser, i18n) {
                 [Tokenizer.primitives.FORWARD, 60]
             ],
             Parser.errors.UNMATCHED_CLOSING_BRACKET
+        )
+    );
+    tests.push(
+        assertScript(
+            "Trigger error CODEBLOCK_EXPECTED_CLOSING_BRACKET when a code block is never closed",
+            "English",
+            "repeat 2 [fd 10",
+            [],
+            Parser.errors.CODEBLOCK_EXPECTED_CLOSING_BRACKET
+        )
+    );
+    tests.push(
+        assertScript(
+            "Trigger error CODEBLOCK_EXPECTED_CLOSING_BRACKET when a nested code block is never closed",
+            "English",
+            "repeat 2 [fd 10 repeat 3 [rt 90]",
+            [],
+            Parser.errors.CODEBLOCK_EXPECTED_CLOSING_BRACKET
+        )
+    );
+    tests.push(
+        assertScript(
+            "A false IF skips nested code blocks",
+            "English",
+            "if 1 > 2 [repeat 2 [fd 10] rt 5] fd 7",
+            [
+                [Tokenizer.primitives.FORWARD, 7]
+            ]
+        )
+    );
+    tests.push(
+        assertScript(
+            "STOP outside a procedure ends the program",
+            "English",
+            "fd 10 stop fd 20",
+            [
+                [Tokenizer.primitives.FORWARD, 10]
+            ]
+        )
+    );
+    tests.push(
+        assertScript(
+            "STOP inside REPEAT outside a procedure ends the program",
+            "English",
+            "repeat 3 [fd 10 stop] fd 20",
+            [
+                [Tokenizer.primitives.FORWARD, 10]
+            ]
+        )
+    );
+    tests.push(
+        assertScript(
+            "STOP inside IF in a procedure keeps the caller's REPEAT running",
+            "English",
+            lines([
+                "to test :n",
+                "  if :n < 1 [stop]",
+                "  fd 10",
+                "end",
+                "repeat 3 [test 0 rt 90]"
+            ]),
+            [
+                [Tokenizer.primitives.RIGHT, 90],
+                [Tokenizer.primitives.RIGHT, 90],
+                [Tokenizer.primitives.RIGHT, 90]
+            ]
+        )
+    );
+    tests.push(
+        assertScript(
+            "STOP inside REPEAT in a procedure keeps the caller's REPEAT running",
+            "English",
+            lines([
+                "to test",
+                "  repeat 5 [fd 10 if 1 > 0 [stop]]",
+                "end",
+                "repeat 2 [test rt 90]"
+            ]),
+            [
+                [Tokenizer.primitives.FORWARD, 10],
+                [Tokenizer.primitives.RIGHT, 90],
+                [Tokenizer.primitives.FORWARD, 10],
+                [Tokenizer.primitives.RIGHT, 90]
+            ]
         )
     );
     return tests.every(test => test);
